@@ -1,0 +1,10 @@
+.DS_Store
+.RData
+.Rapp.history
+.Rhistory
+Cleaning/.DS_Store Collection/.DS_Store Creation/.DS_Store Estimation/.DS_Store Maps/.DS_Store
+Cleaning/.RData Collection/.RData Creation/.RData Estimation/.RData Maps/.RData
+**/.RDataTmp
+.Rapp.history
+SDD/.Rapp.history
+Cleaning/.Rhistory Collection/.Rhistory Creation/.Rhistory Estimation/.Rhistory Maps/.Rhistory
