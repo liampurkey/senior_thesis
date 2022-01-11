@@ -1,0 +1,131 @@
+---
+title: "Test SDD Function"
+author: "Liam Purkey"
+date: "3/31/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(stringr)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/ps.estimate.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.regularization.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.unitweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.timeweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.utils.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.estimate.R")
+```
+
+#Import Data 
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv")
+```
+
+#Test that sdd.regularization returns correct parameter
+
+```{r}
+#Split Dataset based on treatment variable
+gen = nyc_data %>%
+  filter(edugentrify == 1) %>%
+  filter(year == 2010)
+nogen = nyc_data %>%
+  filter(edugentrify == 0) %>%
+  filter(year == 2010)
+```
+
+```{r}
+#Calculate parameter
+zeta = min(abs(1/((mean(gen$p_white_2010) - mean(nogen$p_white_2010))/sqrt((var(gen$p_white_2010) + var(nogen$p_white_2010))/2))),
+           abs(1/((mean(gen$p_black_2010) - mean(nogen$p_black_2010))/sqrt((var(gen$p_black_2010) + var(nogen$p_black_2010))/2))),
+           abs(1/((mean(gen$p_asian_2010) - mean(nogen$p_asian_2010))/sqrt((var(gen$p_asian_2010) + var(nogen$p_asian_2010))/2))))
+```
+
+```{r}
+#Use sdd.regularization to calculate parameter
+zeta_sdd = sdd.regularization(outcome = "d_w_lowwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year",
+                              time_pre = 2010, covariates = c("p_white_2010", "p_black_2010", "p_asian_2010"), data = nyc_data)
+```
+
+```{r}
+if (zeta != zeta_sdd) {
+  print("The parameters do not match")
+  stop()
+} else if (zeta == zeta_sdd) {
+  print("The parameters match")
+}
+```
+
+#Test that sdd.unitweights produces appropriate inputs 
+
+```{r}
+unitweights_out = sdd.unitweights(outcome = "d_w_lowwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year",
+                              time_pre = 2010, time_init = 2002, zeta = zeta, covariates = c("p_white_2010", "p_black_2010", "p_asian_2010"), data = nyc_data)
+```
+
+```{r}
+target_vec = unitweights_out$target_vec
+input_matrix = unitweights_out$input_matrix
+```
+
+```{r}
+if (isTRUE(identical(rownames(target_vec), rownames(input_matrix)))) {
+  print("Inputs are conformable")
+} else {
+  stop()
+}
+```
+
+#Test that sdd.timeweights produces appropriate inputs 
+
+```{r}
+timeweights_out = sdd.timeweights(outcome = "d_w_lowwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year",
+                              time_pre = 2010, data = nyc_data)
+```
+
+```{r}
+target_vec = timeweights_out$target_vec
+input_matrix = timeweights_out$input_matrix
+```
+
+```{r}
+if (isTRUE(identical(rownames(target_vec), rownames(input_matrix)))) {
+  print("Inputs are conformable")
+} else {
+  stop()
+}
+```
+
+#Test that sdd.preparedata correctly demeans data for twfe estimation
+
+```{r}
+twfe_data = sdd.preparedata(outcome = "d_w_lowwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", time_pre = 2010, data = nyc_data)
+lm_estimate = lm(outcome_twfe ~ treatment_twfe, data = twfe_data)
+```
+
+```{r}
+plm_data = nyc_data %>%
+  mutate(edugentrify = case_when(year <= 2010 ~ 0,
+                                 year > 2010 ~ edugentrify))
+plm_estimate = plm(d_w_lowwage ~ edugentrify, model = "within", effect = "twoways", index = c("GEOID", "year"), data = plm_data)
+```
+
+```{r}
+if (abs(lm_estimate$coefficients[2]) >= abs(plm_estimate$coefficients[1]) - 1 & abs(lm_estimate$coefficients[2]) <= abs(plm_estimate$coefficients[1]) + 1) {
+  print("Estimates are approximately equal")
+} else {
+  stop()
+}
+```
+
+
+
+
+
