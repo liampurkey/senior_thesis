@@ -1,0 +1,191 @@
+---
+title: "Backdating"
+author: "Liam Purkey"
+date: "3/30/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(stringr)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/ps.estimate.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.regularization.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.unitweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.timeweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.utils.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.estimate.R")
+```
+
+#Import Data 
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv") %>%
+  filter(year <= 2010)
+```
+
+#Calculate Backdated Estimates
+
+```{r}
+food = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2006, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = FALSE, 
+                  output_name = "food", data = nyc_data)
+```
+
+```{r}
+food_out = food$tex_table
+food_plot = food$plot_data
+```
+
+```{r}
+mw = sdd.estimate(outcome = "d_od_midwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2006, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = TRUE, 
+                  output_name = "mw", data = nyc_data)
+```
+
+```{r}
+mw_out = mw$tex_table
+mw_plot = mw$plot_data
+```
+
+```{r}
+services = sdd.estimate(outcome = "d_od_services", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2006, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = FALSE, 
+                  output_name = "services", data = nyc_data)
+```
+
+```{r}
+services_out = services$tex_table
+services_plot = services$plot_data
+```
+
+#Export Results
+
+```{r}
+backdating_table = full_join(food_out, mw_out, by = "Name") %>%
+  full_join(services_out, by = "Name") %>%
+  column_to_rownames("Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((backdating_table), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/Robustness/backdating.tex", sanitize.text.function = function(x) x)
+```
+
+#Produce Plots
+
+#Food
+
+```{r}
+food_graph = food_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2006, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(150,275)) +
+  annotate(geom="text", x=2004, y=250, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Midwage
+
+```{r}
+mw_graph = mw_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2006, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(250,350)) +
+  annotate(geom="text", x=2004, y=325, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Services
+
+```{r}
+services_graph = services_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2006, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(350,450)) +
+  annotate(geom="text", x=2004, y=437.5, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Join Graphs
+
+```{r}
+backdating_graph = ggarrange(food_graph, mw_graph, services_graph, ncol = 2, nrow = 2, common.legend = TRUE, legend = "bottom",
+                             align = "h", labels = "AUTO", font.label = c(family = "Palatino"), hjust = 0.00001)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/backdating.png", width = 8, height = 4)
+```
+
+

@@ -1,0 +1,382 @@
+---
+title: "Trimmed Sample"
+author: "Liam Purkey"
+date: "3/29/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(xtable)
+library(lmtest)
+library(sf)
+library(spData)
+library(tmap)
+library(extrafont)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/ps.estimate.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.regularization.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.unitweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.timeweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.utils.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.estimate.R")
+```
+
+#New York City
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv")
+```
+
+```{r}
+pscore_data = nyc_data %>%
+  filter(year == 2018)
+```
+
+#Estimate Propensity Score
+
+```{r}
+pscore.covariates = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+                       "medianincome_2010", "medianrent_2010", "d_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+pscore = ps.estimate(outcome = "edugentrify", baseline.covariates = c("dist_cbd", "dist_hi"), 
+                     covariates = pscore.covariates, data = pscore_data, clin = 1, cqua = 2.7)
+```
+
+#Create Trimmed Sample
+
+```{r}
+trimmed_sample = pscore_data %>%
+  mutate(pscore = predict(pscore, type = "response")) %>%
+  select(GEOID, pscore) %>%
+  filter(pscore >= 0.1 & pscore <= 0.9) 
+```
+
+```{r}
+trimmed_sample = inner_join(trimmed_sample, nyc_data, by = "GEOID")
+```
+
+```{r}
+post_data = trimmed_sample %>%
+  spread.variables(variable = "d_w_food", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_od_midwage", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_od_services", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010), unit_var = "GEOID", time_var = "year", data = .) %>%
+  filter(year >= 2011) %>%
+  group_by(GEOID) %>%
+  mutate(d_w_food_post = mean(d_w_food)) %>%
+  mutate(d_od_midwage_post = mean(d_od_midwage)) %>%
+  mutate(d_od_services_post = mean(d_od_services)) %>%
+  ungroup() %>%
+  filter(year == 2018)
+```
+
+#Calculate Estimates
+
+#Food (Baseline)
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+foodlasso = rlasso(d_w_food_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + d_w_food_2002 + d_w_food_2003 + d_w_food_2004 + d_w_food_2005 + d_w_food_2006 + 
+                           d_w_food_2007 + d_w_food_2009 + d_w_food_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(foodlasso$index[foodlasso$index == TRUE]))
+```
+
+```{r}
+food_lasso_data = trimmed_sample %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+food = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "food", data = food_lasso_data)
+```
+
+```{r}
+food_out = food$tex_table
+food_plot = food$plot_data
+```
+
+#Midwage 
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010",
+           "p_lesshs_pop_2010", "p_lesshs_laborforce_2010", "p_lesshs_unemp_2010",
+           "p_hs_pop_2010", "p_hs_laborforce_2010", "p_hs_unemp_2010")
+```
+
+```{r}
+mwlasso = rlasso(d_od_midwage_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + 
+                           p_lesshs_pop_2010 + p_lesshs_laborforce_2010 + p_lesshs_unemp_2010 + 
+                           p_hs_pop_2010 + p_hs_laborforce_2010 + p_hs_unemp_2010 + 
+                           d_od_midwage_2002 + d_od_midwage_2003 + d_od_midwage_2004 + d_od_midwage_2005 + d_od_midwage_2006 + 
+                           d_od_midwage_2007 + d_od_midwage_2009 + d_od_midwage_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(mwlasso$index[mwlasso$index == TRUE]))
+```
+
+```{r}
+mw_lasso_data = trimmed_sample %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+mw = sdd.estimate(outcome = "d_od_midwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, output_name = "mw ", 
+                  data = mw_lasso_data)
+```
+
+```{r}
+mw_out = mw$tex_table
+mw_plot = mw$plot_data
+```
+
+#Services
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010",
+           "p_lesshs_pop_2010", "p_lesshs_laborforce_2010", "p_lesshs_unemp_2010",
+           "p_hs_pop_2010", "p_hs_laborforce_2010", "p_hs_unemp_2010")
+```
+
+```{r}
+serviceslasso = rlasso(d_od_services_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + 
+                           p_lesshs_pop_2010 + p_lesshs_laborforce_2010 + p_lesshs_unemp_2010 + 
+                           p_hs_pop_2010 + p_hs_laborforce_2010 + p_hs_unemp_2010 + 
+                           d_od_services_2002 + d_od_services_2003 + d_od_services_2004 + d_od_services_2005 + d_od_services_2006 + 
+                           d_od_services_2007 + d_od_services_2009 + d_od_services_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(serviceslasso$index[serviceslasso$index == TRUE]))
+```
+
+```{r}
+services_lasso_data = trimmed_sample %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+services = sdd.estimate(outcome = "d_od_services", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, output_name = "services", 
+                  data = services_lasso_data)
+```
+
+```{r}
+services_out = services$tex_table
+services_plot = services$plot_data
+```
+
+#Format Data
+
+```{r}
+trimmed_table = full_join(food_out, mw_out, by = "Name") %>%
+  full_join(services_out, by = "Name") %>%
+  column_to_rownames("Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((trimmed_table), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/Robustness/trimmed_sample.tex", sanitize.text.function = function(x) x)
+```
+
+#Plot Trimmed Sample 
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries")
+nyc_tracts = st_read("New York/New York.shp")
+```
+
+```{r}
+nyc_tracts = nyc_tracts %>%
+  mutate(City = "New York City") %>%
+  mutate(State = "NY") 
+```
+
+```{r}
+trimmed_map = left_join(nyc_tracts, trimmed_sample %>% filter(year == 2018)
+                        %>% mutate(GEOID = as.character(GEOID)), by = c("GEOID", "City", "State"))
+```
+
+```{r}
+trimmed_map = trimmed_map %>%
+  mutate(edugentrify = case_when(is.na(edugentrify) ~ 0,
+                                 edugentrify == 0 ~ 1,
+                                 edugentrify == 1 ~ 2))
+```
+
+```{r}
+trimmed_out = tm_shape(trimmed_map) + tm_polygons("edugentrify", style = "cat", palette = c("#DEEBF7", "#FDBEB9", "red4"),
+                                labels = c("Not in Sample", "Not Gentrifying", "Gentrifying"),
+                                title = "Legend") + 
+                    tm_layout(legend.outside = TRUE, legend.text.size = .8, legend.title.size = 1, fontfamily = "Palatino", frame = FALSE,
+                              asp = 1)
+```
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/Results/Maps")
+tmap_save(tm = trimmed_out, filename = "New York/trimmed_map.png")
+```
+
+#Produce Plots
+
+#Food
+
+```{r}
+food_graph = food_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(150,750)) +
+  annotate(geom="text", x=2006, y=600, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Midwage
+
+```{r}
+mw_graph = mw_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(250,500)) +
+  annotate(geom="text", x=2006, y=440, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Services
+
+```{r}
+services_graph = services_plot %>% 
+  gather(key = "variable", value = "value", -year) %>%
+  filter(variable != "time_weight") %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylab("Number of Jobs") +
+  xlab("Year") +
+  ylim(c(300,600)) +
+  annotate(geom="text", x=2006, y=525, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Join Graphs
+
+```{r}
+trimmed_graph = ggarrange(food_graph, mw_graph, services_graph, ncol = 2, nrow = 2, common.legend = TRUE, legend = "bottom",
+                             align = "h", labels = "AUTO", font.label = c(family = "Palatino"), hjust = 0.00001)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/trimmed_sample.png", width = 8, height = 4)
+```
+

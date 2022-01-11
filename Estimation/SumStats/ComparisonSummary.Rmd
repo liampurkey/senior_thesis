@@ -1,0 +1,115 @@
+---
+title: "Comparison Characteristics"
+author: "Liam Purkey"
+date: "3/17/2021"
+output: html_document
+---
+
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(sf)
+library(spData)
+source("/Users/liampurkey/Desktop/Honors/Code/R/sdid.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Data 
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv") %>%
+  filter(year == 2010)
+```
+
+#Import Weight Lists
+
+```{r}
+wage_ntas = read_csv("/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Raw/wage_ntas.csv") %>%
+  filter(NTA != "Total") %>%
+  as.matrix() %>%
+  as.vector()
+ind_ntas = read_csv("/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Raw/ind_ntas.csv") %>%
+  filter(NTA != "Total") %>%
+  as.matrix() %>%
+  as.vector()
+od_wage_ntas = read_csv("/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Raw/od_wage_ntas.csv") %>%
+  filter(NTA != "Total") %>%
+  as.matrix() %>%
+  as.vector()
+od_ind_ntas = read_csv("/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Raw/od_ind_ntas.csv") %>%
+  filter(NTA != "Total") %>%
+  as.matrix() %>%
+  as.vector()
+```
+
+#Determine Union of Neighborhoods
+
+```{r}
+ntas = union(wage_ntas, ind_ntas) %>%
+  union(od_wage_ntas) %>%
+  union(od_ind_ntas) 
+```
+
+#Summarize Characteristics of High Weighted NTAs
+
+```{r}
+weight_data = nyc_data %>%
+  mutate(high_weight = case_when(edugentrify == 1 ~ 2,
+                                 NTA %in% ntas ~ 1,
+                                 !(NTA %in% ntas) & edugentrify == 0 ~ 0))
+```
+
+```{r}
+gen_vars = c("pc_nta_p_college_pop", "p_college_pop_2010", "p_white_2010", "p_black_2010", "p_asian_2010", "p_hispanic_2010", "medianincome_2010", "medianrent_2010", "medianhomevalue_2010",
+             "dist_cbd", "dist_hi")
+
+mean_sd = list(mean = ~ round(mean(.x, na.rm = TRUE), 2), sd = ~ paste("(", round(sd(.x, na.rm = TRUE), 2), ")", sep = ""))
+```
+
+```{r}
+weight_stats = weight_data %>%
+  group_by(high_weight) %>%
+  summarize(across(gen_vars, .fns = mean_sd)) %>%
+  arrange(desc(high_weight)) %>%
+  t()
+```
+
+```{r}
+colnames(weight_stats) = c("Gentrifying", "High-Weight", "Low-Weight") 
+weight_stats = weight_stats[-1,]
+```
+
+```{r}
+weight_n = weight_data %>%
+  group_by(high_weight) %>%
+  summarize(n = n()) %>% 
+  arrange(desc(high_weight)) %>%
+  t()
+```
+
+```{r}
+colnames(weight_n) = c("Gentrifying", "High-Weight", "Low-Weight")
+```
+
+```{r}
+weight_n = weight_n[-1,]
+```
+
+```{r}
+weight_stats = rbind(weight_stats, weight_n)
+```
+
+```{r}
+textable = xtable(weight_stats, type = "latex", align = rep("l", ncol(weight_stats) + 1))
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/SumStats/weight_stats.tex", sanitize.text.function = function(x) x, 
+      sanitize.rownames.function = format.rownames)
+```
+
+
+

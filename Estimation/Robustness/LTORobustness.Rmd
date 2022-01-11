@@ -1,0 +1,336 @@
+---
+title: "Wage Robustness (Leave One Out)"
+author: "Liam Purkey"
+date: "3/15/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(stringr)
+library(xtable)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/ps.estimate.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.regularization.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.unitweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.timeweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.utils.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.estimate.R")
+```
+
+#Import Data 
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv")
+```
+
+```{r}
+post_data = nyc_data %>%
+  spread.variables(variable = "d_w_food", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_od_midwage", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_od_services", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010), unit_var = "GEOID", time_var = "year", data = .) %>%
+  filter(year >= 2011) %>%
+  group_by(GEOID) %>%
+  mutate(d_w_food_post = mean(d_w_food)) %>%
+  mutate(d_od_midwage_post = mean(d_od_midwage)) %>%
+  mutate(d_od_services_post = mean(d_od_services)) %>%
+  ungroup() %>%
+  filter(year == 2018)
+```
+
+```{r}
+sum_fun = list(mean = ~mean(as.double(.x)), min = ~min(as.double(.x)), p25 = ~quantile(as.double(.x), probs = c(0.25)), p50 = ~quantile(as.double(.x), probs = c(0.50)),
+               p75 = ~quantile(as.double(.x), probs = c(0.75)), max = ~max(as.double(.x)))
+```
+
+###Food 
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", 
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+foodlasso = rlasso(d_w_food_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + 
+                                     medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                                     p_nhood_college_pop_2010 + nta_medianincome_2010, 
+                                     data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(foodlasso$index[foodlasso$index == TRUE]))
+```
+
+```{r}
+food_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+#Calculate Weights
+
+```{r}
+food = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "food", data = food_lasso_data)
+```
+
+
+```{r}
+food_ntas = food$cluster_data %>%
+  filter(NTA != "Total") %>%
+  select(NTA) %>%
+  as.matrix() %>%
+  as.vector()
+```
+
+#Calculate Leave Two Out Estimates 
+
+```{r}
+food_combinations = combn(food_ntas, 2)
+```
+
+```{r}
+for (i in 1:ncol(food_combinations)) {
+  
+  lto_data = food_lasso_data %>%
+    filter(!NTA %in% food_combinations[,i])
+  
+  lto_estimate = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "food", data = lto_data)
+  
+  lto_out = lto_estimate$tex_table
+  
+  if (i == 1) {
+    lto_matrix = lto_out
+  } else {
+    lto_matrix = inner_join(lto_matrix, lto_out, by = "Name")
+  }
+}
+```
+
+```{r}
+food_out = lto_matrix %>%
+  gather(key = "lto", value = "Output", -Name)  %>%
+  mutate(Output = gsub("\\$|\\^|\\{|\\*|\\}|\\(|\\)", "", Output)) %>%
+  mutate(Name = if_else(Name == "", "t", Name)) %>%
+  group_by(Name) %>%
+  summarize_at(vars(Output), .funs = sum_fun) %>%
+  mutate(mean = round(mean, 4)) %>%
+  tibble::column_to_rownames(var = "Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((food_out), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/Robustness/food_lto.tex", sanitize.text.function = function(x) x)
+```
+
+###Midwage 
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010",
+           "p_lesshs_pop_2010", "p_lesshs_laborforce_2010", "p_lesshs_unemp_2010",
+           "p_hs_pop_2010", "p_hs_laborforce_2010", "p_hs_unemp_2010")
+```
+
+```{r}
+mwlasso = rlasso(d_od_midwage_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + 
+                           p_lesshs_pop_2010 + p_lesshs_laborforce_2010 + p_lesshs_unemp_2010 + 
+                           p_hs_pop_2010 + p_hs_laborforce_2010 + p_hs_unemp_2010 + 
+                           d_od_midwage_2002 + d_od_midwage_2003 + d_od_midwage_2004 + d_od_midwage_2005 + d_od_midwage_2006 + 
+                           d_od_midwage_2007 + d_od_midwage_2009 + d_od_midwage_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(mwlasso$index[mwlasso$index == TRUE]))
+```
+
+```{r}
+mw_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+#Calculate Weights
+
+```{r}
+mw = sdd.estimate(outcome = "d_od_midwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "mw", data = mw_lasso_data)
+```
+
+```{r}
+mw_ntas = mw$cluster_data %>%
+  filter(NTA != "Total") %>%
+  select(NTA) %>%
+  as.matrix() %>%
+  as.vector()
+```
+
+#Calculate Leave Two Out Estimates 
+
+```{r}
+mw_combinations = combn(mw_ntas, 2)
+```
+
+```{r}
+for (i in 1:ncol(mw_combinations)) {
+  
+  lto_data = mw_lasso_data %>%
+    filter(!NTA %in% food_combinations[,i])
+  
+  lto_estimate = sdd.estimate(outcome = "d_od_midwage", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "mw", data = lto_data)
+  
+  lto_out = lto_estimate$tex_table
+  
+  if (i == 1) {
+    lto_matrix = lto_out
+  } else {
+    lto_matrix = inner_join(lto_matrix, lto_out, by = "Name")
+  }
+}
+```
+
+```{r}
+mw_out = lto_matrix %>%
+  gather(key = "lto", value = "Output", -Name)  %>%
+  mutate(Output = gsub("\\$|\\^|\\{|\\*|\\}|\\(|\\)", "", Output)) %>%
+  mutate(Name = if_else(Name == "", "t", Name)) %>%
+  group_by(Name) %>%
+  summarize_at(vars(Output), .funs = sum_fun) %>%
+  mutate(mean = round(mean, 4)) %>%
+  tibble::column_to_rownames(var = "Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((mw_out), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/Robustness/od_mw_lto.tex", sanitize.text.function = function(x) x)
+```
+
+###Services
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010",
+           "p_lesshs_pop_2010", "p_lesshs_laborforce_2010", "p_lesshs_unemp_2010",
+           "p_hs_pop_2010", "p_hs_laborforce_2010", "p_hs_unemp_2010")
+```
+
+```{r}
+serviceslasso = rlasso(d_od_services_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + 
+                           p_lesshs_pop_2010 + p_lesshs_laborforce_2010 + p_lesshs_unemp_2010 + 
+                           p_hs_pop_2010 + p_hs_laborforce_2010 + p_hs_unemp_2010 + 
+                           d_od_services_2002 + d_od_services_2003 + d_od_services_2004 + d_od_services_2005 + d_od_services_2006 + 
+                           d_od_services_2007 + d_od_services_2009 + d_od_services_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(serviceslasso$index[serviceslasso$index == TRUE]))
+```
+
+```{r}
+services_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+#Calculate Weights
+
+```{r}
+services = sdd.estimate(outcome = "d_od_services", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "services", data = services_lasso_data)
+```
+
+```{r}
+services_ntas = services$cluster_data %>%
+  filter(NTA != "Total") %>%
+  select(NTA) %>%
+  as.matrix() %>%
+  as.vector()
+```
+
+#Calculate Leave Two Out Estimates 
+
+```{r}
+services_combinations = combn(services_ntas, 2)
+```
+
+```{r}
+for (i in 1:ncol(services_combinations)) {
+  
+  lto_data = services_lasso_data %>%
+    filter(!NTA %in% food_combinations[,i])
+  
+  lto_estimate = sdd.estimate(outcome = "d_od_services", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, 
+                  output_name = "services", data = lto_data)
+  
+  lto_out = lto_estimate$tex_table
+  
+  if (i == 1) {
+    lto_matrix = lto_out
+  } else {
+    lto_matrix = inner_join(lto_matrix, lto_out, by = "Name")
+  }
+}
+```
+
+```{r}
+services_out = lto_matrix %>%
+  gather(key = "lto", value = "Output", -Name)  %>%
+  mutate(Output = gsub("\\$|\\^|\\{|\\*|\\}|\\(|\\)", "", Output)) %>%
+  mutate(Name = if_else(Name == "", "t", Name)) %>%
+  group_by(Name) %>%
+  summarize_at(vars(Output), .funs = sum_fun) %>%
+  mutate(mean = round(mean, 4)) %>%
+  tibble::column_to_rownames(var = "Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((services_out), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/Robustness/od_services_lto.tex", sanitize.text.function = function(x) x)
+```
+
+
+

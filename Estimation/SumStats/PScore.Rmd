@@ -1,0 +1,125 @@
+---
+title: "Propensity Score and Lasso Analysis"
+author: "Liam Purkey"
+date: "2/28/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(stargazer)
+library(lmtest)
+source("/Users/liampurkey/Desktop/Honors/Code/R/ps.estimate.R")
+```
+
+#New York City
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv")
+```
+
+```{r}
+nyc_data = nyc_data %>%
+  filter(year == 2018)
+```
+
+#Estimate Propensity Score
+
+```{r}
+pscore.covariates = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+                       "medianincome_2010", "medianrent_2010", "d_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+pscore = ps.estimate(outcome = "edugentrify", baseline.covariates = c("dist_cbd", "dist_hi"), 
+                     covariates = pscore.covariates, data = nyc_data, clin = 1, cqua = 2.7)
+```
+
+```{r}
+stargazer(pscore, out = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/pscore.tex")
+```
+
+```{r}
+pscore_data = data.frame(pscore = predict(pscore, type = "response"),
+                     edugentrify = pscore$model$edugentrify)
+```
+
+```{r}
+labs <- c("Gentrified", "Did Not Gentrify")
+pscore_out = pscore_data %>%
+  mutate(edugentrify = ifelse(edugentrify == 1, labs[1], labs[2])) %>%
+  ggplot(aes(x = pscore, fill=edugentrify, colour=edugentrify)) +
+  geom_histogram(color = "white", bins = 20, aes(y=..density..), position = "stack") +
+  aes(fill = edugentrify) +
+  scale_fill_manual(values=c("#FDBEB9", "red4"), name = "Legend") + 
+  xlab("Probability of Gentrifying") + 
+  ylab("Density") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(),
+        strip.text = element_blank(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm"),
+        legend.position = "bottom",
+        legend.title = element_blank())
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/pscore.png", width = 6, height = 4)
+```
+
+#Estimate Propensity Score
+
+```{r}
+pscore.covariates = c("d_w_total_2010", "d_w_lowwage_2010", "d_w_midwage_2010", "d_w_highwage_2010",
+                      "d_w_food_2010", "d_w_retail_2010", "d_w_manufacturing_2010")
+```
+
+```{r}
+pscore = ps.estimate(outcome = "edugentrify", baseline.covariates = c(), 
+                     covariates = pscore.covariates, data = nyc_data, clin = 1, cqua = 2.7)
+```
+
+```{r}
+stargazer(pscore, out = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/pscore_emp.tex")
+```
+
+```{r}
+pscore_data = data.frame(pscore = predict(pscore, type = "response"),
+                     edugentrify = pscore$model$edugentrify)
+```
+
+```{r}
+labs <- c("Gentrified", "Did Not Gentrify")
+pscore_out = pscore_data %>%
+  mutate(edugentrify = ifelse(edugentrify == 1, labs[1], labs[2])) %>%
+  ggplot(aes(x = pscore, fill=edugentrify, colour=edugentrify)) +
+  geom_histogram(color = "white", bins = 20, aes(y=..density..), position = "stack") +
+  aes(fill = edugentrify) +
+  scale_fill_manual(values=c("#FDBEB9", "red4"), name = "Legend") + 
+  guides(color=guide_legend(title = NULL, ncol=2)) +
+  xlab("Probability of Gentrifying") + 
+  ylab("Density") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(),
+        strip.text = element_blank(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm"),
+        legend.position = "bottom",
+        legend.title = element_blank())
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/pscore_emp.png", width = 6, height = 4)
+```
+
+
+

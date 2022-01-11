@@ -1,0 +1,29 @@
+---
+title: "Employment by Industry"
+author: "Liam Purkey"
+date: "4/5/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(xtable)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Data 
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/CleanDataFeb")
+nyc_data = read_csv("New York/nyc_panel.csv") %>%
+  filter(year == 2010)
+```
+
+```{r}
+nyc_data %>%
+  filter(edugentrify == 1) %>%
+  summarize(across(c(d_w_food, d_w_retail, d_w_manufacturing), .fns = ~mean(.x/d_w_total)))
+```
+
+

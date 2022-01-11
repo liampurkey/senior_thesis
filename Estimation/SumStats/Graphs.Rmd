@@ -1,0 +1,158 @@
+---
+title: "Presentation Graphs"
+author: "Liam Purkey"
+date: "4/12/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(ggpubr)
+```
+
+#Create DID Plot
+
+```{r}
+did_data = as.data.frame(cbind(rep(2002:2018, 3), c(rep(0, 17), rep(1,17), rep(2,17)))) %>%
+  rename(year = V1) %>%
+  rename(genid = V2)  %>%
+  mutate(edugentrify = ifelse(year >= 2011 & (genid == 1 | genid == 2), 1, 0)) %>%
+  mutate(outcome = case_when(genid == 0 ~ 2750 + (year - 2001)*25,
+                             genid == 1 ~ 3000 + (year - 2001)*25 + edugentrify*(year - 2010)*25,
+                             genid == 2 ~ 3000 + (year - 2001)*25)) %>%
+  mutate(variable = case_when(genid == 2 ~ "Counterfactual",
+                              genid == 1 ~ "Gentrifying",
+                              genid == 0 ~ "Not Gentrifying")) 
+```
+
+```{r}
+did_data$variable = factor(did_data$variable, levels = c("Gentrifying", "Not Gentrifying", "Counterfactual"))
+```
+
+```{r}
+did_plot = did_data %>%
+  ggplot(aes(x = year, y = outcome)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Not Gentrifying" = "#FDBEB9", "Counterfactual" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Not Gentrifying" = "dashed", "Counterfactual" = "twodash")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  guides(color=guide_legend(title = NULL, ncol=3) , linetype = guide_legend(title = NULL, ncol=3)) +
+  ylim(2500, 3750) +
+  annotate(geom="text", x=2006, y=3500, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.position = "bottom") + 
+  labs(color = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Create SDID Plot
+
+```{r}
+sdid_data = as.data.frame(cbind(rep(2002:2018, 2), c(rep(0, 17), rep(1,17)))) %>%
+  rename(year = V1) %>%
+  rename(genid = V2)  %>%
+  mutate(edugentrify = ifelse(year >= 2011 & genid == 1, 1, 0)) %>%
+  mutate(outcome = case_when(genid == 0 ~ 2750 + (year - 2001)*25,
+                             genid == 1 ~ 3000 + (year - 2001)*50 + edugentrify*(year - 2010)*25)) %>%
+  mutate(variable = case_when(genid == 1 ~ "Gentrifying",
+                              genid == 0 ~ "Not Gentrifying")) 
+```
+
+```{r}
+sdid_data$variable = factor(sdid_data$variable, levels = c("Gentrifying", "Not Gentrifying"))
+```
+
+```{r}
+sdid_plot = sdid_data %>%
+  ggplot(aes(x = year, y = outcome)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Not Gentrifying" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Not Gentrifying" = "dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  ylim(2500, 4250) +
+  annotate(geom="text", x=2006, y=3900, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.position = "bottom") + 
+  labs(color = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Create Second SDID Plot
+
+```{r}
+sdid_2_data = as.data.frame(cbind(rep(2002:2018, 3), c(rep(0, 17), rep(1,17), rep(2,17)))) %>%
+  rename(year = V1) %>%
+  rename(genid = V2)  %>%
+  mutate(edugentrify = ifelse(year >= 2011 & (genid == 1 | genid == 2), 1, 0)) %>%
+  mutate(outcome = case_when(genid == 0 ~ 2750 + (year - 2001)*25,
+                             genid == 1 ~ 3000 + (year - 2001)*50 + edugentrify*(year - 2010)*25,
+                             genid == 2 ~ 3000 + (year - 2001)*50)) %>%
+  mutate(variable = case_when(genid == 2 ~ "Counterfactual (SDiD)",
+                              genid == 1 ~ "Gentrifying",
+                              genid == 0 ~ "Not Gentrifying")) 
+```
+
+```{r}
+sdid_2_data$variable = factor(sdid_2_data$variable, levels = c("Gentrifying", "Not Gentrifying", 
+                                                           "Counterfactual (SDiD)"))
+```
+
+```{r}
+sdid_2_plot = sdid_2_data %>%
+  ggplot(aes(x = year, y = outcome)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Not Gentrifying" = "#FDBEB9", "Counterfactual (SDiD)" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Not Gentrifying" = "dashed", "Counterfactual (SDiD)" = "longdash")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  guides(color=guide_legend(title = NULL, ncol=3) , linetype = guide_legend(title = NULL, ncol=3)) +
+  ylim(2500, 4250) +
+  annotate(geom="text", x=2006, y=3900, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.position = "bottom") + 
+  labs(color = "Legend") +
+  labs(linetype = "Legend")
+```
+
+#Combine Plots
+
+```{r}
+ggarrange(sdid_plot, sdid_2_plot, ncol = 2, common.legend = TRUE, legend.grob = get_legend(sdid_2_plot), legend = "bottom", 
+          align = "h", labels = "AUTO", font.label = c(family = "Palatino"), hjust = -.2)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/presentation_2.png", width = 8, height = 4)
+```
+

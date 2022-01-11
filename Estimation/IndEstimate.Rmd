@@ -1,0 +1,506 @@
+---
+title: "Industrial Estimation"
+author: "Liam Purkey"
+date: "3/2/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(CVXR)
+library(hdm)
+library(plm)
+library(synthdid)
+library(janitor)
+library(xtable)
+library(ggpubr)
+library(lemon)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.regularization.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.unitweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.timeweights.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.utils.R")
+source("/Users/liampurkey/Desktop/Honors/Code/R/SDD/sdd.estimate.R")
+```
+
+#Import Data 
+
+```{r}
+nyc_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv") 
+```
+
+```{r}
+post_data = nyc_data %>%
+  spread.variables(variable = "d_w_food", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_w_retail", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009), unit_var = "GEOID", time_var = "year", data = .) %>%
+  spread.variables(variable = "d_w_manufacturing", years = c(2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009), unit_var = "GEOID", time_var = "year", data = .) %>%
+  filter(year >= 2011) %>%
+  group_by(GEOID) %>%
+  mutate(d_w_food_post = mean(d_w_food)) %>%
+  mutate(d_w_retail_post = mean(d_w_retail)) %>%
+  mutate(d_w_manufacturing_post = mean(d_w_manufacturing)) %>%
+  ungroup() %>%
+  filter(year == 2018)
+```
+
+#Food (Baseline)
+
+```{r}
+food = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = FALSE, output_name = "food", data = nyc_data)
+```
+
+```{r}
+food_out = food$tex_table
+food_plot = food$plot_data
+food_weights = food$cluster_data
+```
+
+#Low-Wage (Covariates)
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+foodlasso = rlasso(d_w_food_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 + d_w_food_2002 + d_w_food_2003 + d_w_food_2004 + d_w_food_2005 + d_w_food_2006 + 
+                           d_w_food_2007 + d_w_food_2009 + d_w_food_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(foodlasso$index[foodlasso$index == TRUE]))
+```
+
+```{r}
+food_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+food_covs = sdd.estimate(outcome = "d_w_food", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, output_name = "food_covs", 
+                  data = food_lasso_data)
+```
+
+```{r}
+food_covs_out = food_covs$tex_table
+food_covs_plot = food_covs$plot_data
+food_covs_weights = food_covs$cluster_data
+```
+
+#Retail (Baseline)
+
+```{r}
+retail = sdd.estimate(outcome = "d_w_retail", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = FALSE, output_name = "retail",
+                  data = nyc_data)
+```
+
+```{r}
+retail_out = retail$tex_table
+retail_plot = retail$plot_data
+retail_weights = retail$cluster_data
+```
+
+#Retail (Covariates)
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+retaillasso = rlasso(d_w_retail_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 +
+                           d_w_retail_2002 + d_w_retail_2003 + d_w_retail_2004 + d_w_retail_2005 + d_w_retail_2006 + 
+                           d_w_retail_2007 + d_w_retail_2009 + d_w_retail_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(retaillasso$index[retaillasso$index == TRUE]))
+```
+
+```{r}
+retail_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+retail_covs = sdd.estimate(outcome = "d_w_retail", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, output_name = "retail_covs",
+                  data = retail_lasso_data)
+```
+
+```{r}
+retail_covs_out = retail_covs$tex_table
+retail_covs_plot = retail_covs$plot_data
+retail_covs_weights = retail_covs$cluster_data
+```
+
+#Manufacturing (Baseline)
+
+```{r}
+manu = sdd.estimate(outcome = "d_w_manufacturing", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010"), cluster = FALSE, output_name = "manu", data = nyc_data)
+```
+
+```{r}
+manu_out = manu$tex_table
+manu_plot = manu$plot_data
+manu_weights = manu$cluster_data
+```
+
+#Manufacturing (Covariates)
+
+```{r}
+covars = c("p_white_2010", "p_black_2010", "p_hispanic_2010", "p_asian_2010", "p_hs_pop_2010",
+           "medianincome_2010", "medianrent_2010", "dist_cbd", "dist_hi",
+           "p_nhood_college_pop_2010", "nta_medianincome_2010")
+```
+
+```{r}
+manulasso = rlasso(d_w_manufacturing_post ~ p_white_2010 + p_black_2010 + p_hispanic_2010 + p_asian_2010 + p_hs_pop_2010 +
+                           medianincome_2010 + medianrent_2010 + dist_cbd + dist_hi +
+                           p_nhood_college_pop_2010 + nta_medianincome_2010 +
+                           d_w_manufacturing_2002 + d_w_manufacturing_2003 + d_w_manufacturing_2004 + d_w_manufacturing_2005 + d_w_manufacturing_2006 + 
+                           d_w_manufacturing_2007 + d_w_manufacturing_2009 + d_w_manufacturing_2010, 
+                           data = post_data, intercept = FALSE, post = FALSE)
+```
+
+```{r}
+selected_covars = intersect(covars, names(manulasso$index[manulasso$index == TRUE]))
+```
+
+```{r}
+manu_lasso_data = nyc_data %>%
+  filter(!if_any(all_of(selected_covars), is.na)) %>%
+  filter(!if_any(all_of(selected_covars), is.nan)) %>%
+  filter(!if_any(all_of(selected_covars), is.infinite)) %>%
+  group_by(GEOID) %>%
+  mutate(count = 1) %>%
+  filter(sum(count) == 17) %>%
+  select(-count) %>%
+  ungroup()
+```
+
+```{r}
+manu_covs = sdd.estimate(outcome = "d_w_manufacturing", treatment_var = "edugentrify", unit_var = "GEOID", time_var = "year", cluster_var = "NTA", 
+                  time_pre = 2010, time_init = 2002, covariates = c("p_college_pop_2000", "p_college_pop_2010", selected_covars), cluster = FALSE, output_name = "manu_covs",
+                  data = manu_lasso_data)
+```
+
+```{r}
+manu_covs_out = manu_covs$tex_table
+manu_covs_plot = manu_covs$plot_data
+manu_covs_weights = manu_covs$cluster_data
+```
+
+#Format Regression Tables 
+
+```{r}
+ind_table = full_join(food_out, food_covs_out, by = "Name") %>%
+  full_join(retail_out, by = "Name") %>%
+  full_join(retail_covs_out, by = "Name") %>%
+  full_join(manu_out, by = "Name") %>%
+  full_join(manu_covs_out, by = "Name") %>%
+  column_to_rownames("Name") %>%
+  as.matrix()
+```
+
+```{r}
+textable = xtable((ind_table), type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Tex/ind_main.tex", sanitize.text.function = function(x) x)
+```
+
+#Format Graphs
+
+#Create Legend
+
+```{r}
+legend_data = cbind(rep(c(1,2), 4), c(rep("Gentrifying", 2), rep("Synthetic Control (1)", 2), 
+                        rep("Not Gentrifying", 2), rep("Synthetic Control (2)", 2)), rep(1, 8)) %>%
+  as.data.frame() %>%
+  transmute(year = as.double(V1), variable = V2, value = as.double(V3))
+
+legend_data$variable = factor(legend_data$variable, levels = c("Gentrifying", "Synthetic Control (1)", "Not Gentrifying", "Synthetic Control (2)"))
+
+legend_graph = legend_data %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9", "#FDBEB9", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid", "dotted", "dashed", "dotdash")) +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm")) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend") 
+```
+
+#Food
+
+```{r}
+food_synth = inner_join(food_plot, food_covs_plot %>% select(-time_weight, -treated), by = "year") %>%
+  rename(control = control.x) %>%
+  rename(control_covs = control.y) %>%
+  gather(key = "variable", value = "value", -year) %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)",
+                              variable == "control_covs" ~ "Synthetic Control (2)", 
+                              variable == "time_weight" ~ "Year Weight")) %>%
+  filter(variable != "Year Weight") %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Synthetic Control (1)" = "#FDBEB9", "Synthetic Control (2)" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Synthetic Control (1)" = "dotted", "Synthetic Control (2)" = "dotdash")) +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(100,800)) +
+  annotate(geom="text", x=2006, y=600, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend") 
+```
+
+```{r}
+food_raw = food_lasso_data %>% 
+  group_by(edugentrify, year) %>%
+  summarize(value = mean(d_w_food)) %>%
+  mutate(variable = case_when(edugentrify == 1 ~ "Gentrifying",
+                              edugentrify == 0 ~ "Not Gentrifying")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(100,800)) +
+  annotate(geom="text", x=2006, y=600, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+```{r}
+food_graph = ggarrange(food_raw, food_synth, ncol = 2, common.legend = TRUE, legend.grob = get_legend(legend_graph), legend = "bottom", align = "h", labels = "AUTO", 
+          font.label = c(family = "Palatino"), hjust = -.2)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/food_main.png", width = 8, height = 4, units = "in")
+```
+
+#Retail
+
+```{r}
+retail_synth = inner_join(retail_plot, retail_covs_plot %>% select(-time_weight, -treated), by = "year") %>%
+  rename(control = control.x) %>%
+  rename(control_covs = control.y) %>%
+  gather(key = "variable", value = "value", -year) %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)",
+                              variable == "control_covs" ~ "Synthetic Control (2)", 
+                              variable == "time_weight" ~ "Year Weight")) %>%
+  filter(variable != "Year Weight") %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Synthetic Control (1)" = "#FDBEB9", "Synthetic Control (2)" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Synthetic Control (1)" = "dotted", "Synthetic Control (2)" = "dotdash")) +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(500,1500)) +
+  annotate(geom="text", x=2006, y=1250, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend") 
+```
+
+```{r}
+retail_raw = retail_lasso_data %>% 
+  group_by(edugentrify, year) %>%
+  summarize(value = mean(d_w_retail)) %>%
+  mutate(variable = case_when(edugentrify == 1 ~ "Gentrifying",
+                              edugentrify == 0 ~ "Not Gentrifying")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(500,1500)) +
+  annotate(geom="text", x=2006, y=1250, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+```{r}
+retail_graph = ggarrange(retail_raw, retail_synth, ncol = 2, common.legend = TRUE, legend.grob = get_legend(legend_graph), legend = "bottom", align = "h", labels = "AUTO", 
+          font.label = c(family = "Palatino"), hjust = -.2)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/retail_main.png", width = 8, height = 4)
+```
+
+#Manufacturing
+
+```{r}
+manu_synth = inner_join(manu_plot, manu_covs_plot %>% select(-time_weight, -treated), by = "year") %>%
+  rename(control = control.x) %>%
+  rename(control_covs = control.y) %>%
+  gather(key = "variable", value = "value", -year) %>%
+  mutate(variable = case_when(variable == "treated" ~ "Gentrifying",
+                              variable == "control" ~ "Synthetic Control (1)",
+                              variable == "control_covs" ~ "Synthetic Control (2)", 
+                              variable == "time_weight" ~ "Year Weight")) %>%
+  filter(variable != "Year Weight") %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("Gentrifying" = "red4", "Synthetic Control (1)" = "#FDBEB9", "Synthetic Control (2)" = "#FDBEB9")) +
+  scale_linetype_manual(values = c("Gentrifying" = "solid", "Synthetic Control (1)" = "dotted", "Synthetic Control (2)" = "dotdash")) +
+  guides(color=guide_legend(title = NULL, ncol=2) , linetype = guide_legend(title = NULL, ncol=2)) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(100,800)) +
+  annotate(geom="text", x=2006, y=700, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend") 
+```
+
+```{r}
+manu_raw = manu_lasso_data %>% 
+  group_by(edugentrify, year) %>%
+  summarize(value = mean(d_w_manufacturing)) %>%
+  mutate(variable = case_when(edugentrify == 1 ~ "Gentrifying",
+                              edugentrify == 0 ~ "Not Gentrifying")) %>%
+  ggplot(aes(x = year, y = value)) + 
+  geom_line(aes(color = variable, linetype = variable)) + 
+  scale_color_manual(values = c("red4", "#FDBEB9")) +
+  scale_linetype_manual(values = c("solid","dashed")) +
+  geom_vline(xintercept = 2010, linetype = "dashed") +
+  ylab("Number of Jobs (Per Square Mile)") +
+  xlab("Year") +
+  ylim(c(100,800)) +
+  annotate(geom="text", x=2006, y=700, label="Onset of Gentrification",
+              color="black", family = "Palatino", size = 3) +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        strip.text = element_blank(),
+        axis.line = element_line(),
+        legend.key = element_blank(),
+        text=element_text(size=12,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8)) + 
+  labs(colour = "Legend") +
+  labs(linetype = "Legend")
+```
+
+```{r}
+manu_graph = ggarrange(manu_raw, manu_synth, ncol = 2, common.legend = TRUE, legend.grob = get_legend(legend_graph), legend = "bottom", align = "h", labels = "AUTO", 
+          font.label = c(family = "Palatino"), hjust = -.2)
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/manu_main.png", width = 8, height = 4)
+```
+
+#Create Weight Table 
+
+```{r}
+ind_weights = full_join(food_weights %>% select(NTA), food_covs_weights %>% select(NTA), by = "NTA") %>%
+  full_join(retail_weights %>% select(NTA), by = "NTA") %>%
+  full_join(retail_covs_weights %>% select(NTA), by = "NTA") %>%
+  full_join(manu_weights %>% select(NTA), by = "NTA") %>%
+  full_join(manu_covs_weights %>% select(NTA), by = "NTA") %>%
+  filter(NTA != "total") 
+```
+
+```{r}
+write_csv(ind_weights, "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/Raw/ind_ntas.csv")
+```
+
+
+
+
+
+
+
+

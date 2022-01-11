@@ -1,0 +1,360 @@
+---
+title: "Summary Statistics"
+author: "Liam Purkey"
+date: "3/1/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(xtable)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Data 
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/CleanDataFeb")
+nyc_data = read_csv("New York/nyc_panel.csv")
+```
+
+```{r}
+nyc_data[nyc_data == Inf] = NA
+nyc_data[nyc_data == -Inf] = NA
+```
+
+```{r}
+nyc_emp_race = nyc_data %>%
+  filter(year == 2010 | year == 2018) %>%
+  select(GEOID, edugentrify, year, p_w_white, p_w_black, p_w_asian, p_w_hispanic) %>%
+  group_by(GEOID) %>%
+  mutate(across(c(p_w_white, p_w_black, p_w_asian, p_w_hispanic), list(pc = ~ (dplyr::lead(.x, order_by = year) - .x)/.x))) %>%
+  filter(year == 2010) %>%
+  select(-year) %>%
+  filter(!if_any(c(p_w_white_pc, p_w_black_pc, p_w_asian_pc, p_w_hispanic_pc), is.na)) %>%
+  filter(!if_any(c(p_w_white_pc, p_w_black_pc, p_w_asian_pc, p_w_hispanic_pc), is.infinite)) %>%
+  filter(!if_any(c(p_w_white_pc, p_w_black_pc, p_w_asian_pc, p_w_hispanic_pc), is.nan)) %>%
+  ungroup()
+```
+
+```{r}
+nyc_data = nyc_data %>%
+  filter(year == 2010)
+```
+
+#Calculate Sample Size and Neighborhood Size Data
+
+```{r}
+nyc_data %>%
+  group_by(edugentrify) %>%
+  summarize(sample_size = n())
+```
+
+```{r}
+nyc_data %>%
+  select(NTA, edugentrify) %>%
+  distinct() %>%
+  group_by(edugentrify) %>%
+  summarize(nta_sample = n())
+```
+
+```{r}
+nyc_data %>%
+  select(NTA, nhood_area) %>%
+  distinct() %>%
+  summarize(nhood_size = mean(nhood_area))
+```
+
+```{r}
+nyc_data %>%
+  select(NTA, tract_area) %>%
+  distinct() %>%
+  summarize(tract_size = mean(tract_area))
+```
+
+```{r}
+nyc_data %>%
+  select(NTA, GEOID) %>%
+  group_by(NTA) %>%
+  mutate(tracts = n()) %>%
+  ungroup() %>%
+  summarize(nhood_tracts = mean(tracts))
+```
+
+```{r}
+corr_data = nyc_data %>%
+  filter(!is.na(pc_medianincome)) %>%
+  filter(!is.na(pc_p_college_pop))
+```
+
+```{r}
+cor(corr_data$pc_medianincome, corr_data$pc_p_college_pop)
+```
+
+```{r}
+nta_table = nyc_data %>%
+  filter(edugentrify == 1) %>%
+  select(NTA, Borough, pc_nta_p_college_pop) %>%
+  group_by(NTA) %>%
+  distinct() %>%
+  arrange(Borough, NTA) %>%
+  mutate(Borough = case_when(Borough == "Bronx" ~ "The Bronx",
+                             Borough != "Bronx" ~ Borough)) %>%
+  as.matrix()
+```
+
+```{r}
+colnames(nta_table) = c("Neighborhood", "Borough", "Share College Populaton Growth")
+rownames(nta_table) = NULL
+```
+
+```{r}
+textable = xtable(nta_table, type = "latex")
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/New York/nta_table.tex", sanitize.text.function = function(x) x)
+```
+
+#Calculate 2010 OD Means
+
+```{r}
+nyc_data %>% 
+  group_by(edugentrify) %>%
+  summarise(across(c("d_od_midwage", "d_od_services"), .fns = mean))
+```
+
+#Plot College Growth 
+
+```{r}
+labs <- c("Gentrified", "Did Not Gentrify")
+college_pop_hist = nyc_data %>%
+  mutate(edugentrify = ifelse(edugentrify == 1, labs[1], labs[2])) %>%
+  ggplot(aes(x = pc_p_college_pop, fill=edugentrify, colour=edugentrify)) +
+  geom_histogram(color = "white", bins = 25, aes(y=..density..), position = "stack") +
+  aes(fill = edugentrify) +
+  scale_fill_manual(values=c("#FDBEB9", "red4"), name = "Legend") + 
+  xlim(c(-1, 6)) +
+  xlab("Share College Population Growth") + 
+  ylab("Density") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(),
+        strip.text = element_blank(),
+        legend.key = element_blank(),
+        text=element_text(size=8,  family="Palatino"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        legend.key.size = unit(0.5, "cm"),
+        legend.position = "bottom",
+        legend.title = element_blank())
+```
+
+```{r}
+ggsave("/Users/liampurkey/Desktop/Honors/Results/Plots/New York/pc_college.png", width = 6, height = 4)
+```
+
+#Summarize Gentrification Predictors
+
+```{r}
+gen_vars = c("p_college_pop_2010", "p_white_2010", "p_black_2010", "p_asian_2010", "p_hispanic_2010", "medianincome_2010", "medianrent_2010", "medianhomevalue_2010",
+             "dist_cbd", "dist_hi")
+
+mean_sd = list(mean = ~ round(mean(.x, na.rm = TRUE), 2), sd = ~ paste("(", round(sd(.x, na.rm = TRUE), 2), ")", sep = "") )
+```
+
+```{r}
+gen_stats = nyc_data %>%
+  group_by(edugentrify) %>%
+  summarize(across(gen_vars, .fns = mean_sd)) %>%
+  arrange(desc(edugentrify)) %>%
+  t() 
+```
+
+```{r}
+gen_stats = gen_stats[-1,]
+```
+
+```{r}
+gen_test = test.diff(data = nyc_data, gen_vars)
+```
+
+```{r}
+gen_stats = cbind(gen_stats, gen_test)
+```
+
+```{r}
+rownames(gen_stats) = c("Percent College Graduates", ".", "Percent White", ".", "Percent Black", ".", "Percent Asian", ".", "Percent Hispanic", ".",
+                        "Median Income", ".",  "Median Rent", ".", "Median Home Value", ".", 
+                        "Distance to CBD (Miles)", ".", "Distance to Nearest", "High-Income Tract")
+colnames(gen_stats) = c("Gentrifying", "Not Gentrifying", "Difference")
+```
+
+```{r}
+format.rownames = function(x) {
+  
+  gsub("\\.", " ", x)
+
+}
+```
+
+```{r}
+textable = xtable(gen_stats, type = "latex", align = rep("l", ncol(gen_stats) + 1))
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/SumStats/Gen.tex", sanitize.text.function = function(x) x, 
+      sanitize.rownames.function = format.rownames)
+```
+
+#Summarize Employment Predictors 
+
+```{r}
+emp_vars = c("d_w_total_2010", "d_w_food_2010", "d_w_retail_2010", "d_w_manufacturing_2010", "d_w_lowwage_2010", "d_w_midwage_2010",
+             "d_w_highwage_2010")
+
+mean_sd = list(mean = ~ round(mean(.x, na.rm = TRUE), 2), sd = ~ paste("(", round(sd(.x, na.rm = TRUE), 2), ")", sep = "") )
+```
+
+```{r}
+emp_stats = nyc_data %>%
+  group_by(edugentrify) %>%
+  summarize(across(emp_vars, .fns = mean_sd)) %>%
+  arrange(desc(edugentrify)) %>%
+  t() 
+```
+
+```{r}
+emp_stats = emp_stats[-1,]
+```
+
+```{r}
+emp_test = test.diff(data = nyc_data, emp_vars)
+```
+
+```{r}
+emp_stats = cbind(emp_stats, emp_test)
+```
+
+```{r}
+rownames(emp_stats) = c("Total Employment", ".", "Food Service Employment", ".", "Retail Employment", ".", "Manufacturing Employment", ".",
+                        "Low-wage Employment", ".", "Mid-wage Employment", ".", "High-wage Employment", ".")
+colnames(emp_stats) = c("Gentrifying", "Not Gentrifying", "Difference")
+```
+
+```{r}
+format.rownames = function(x) {
+  
+  gsub("\\.", " ", x)
+
+}
+```
+
+```{r}
+textable = xtable(emp_stats, type = "latex", align = rep("l", ncol(emp_stats) + 1))
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/SumStats/Emp.tex", sanitize.text.function = function(x) x, 
+      sanitize.rownames.function = format.rownames)
+```
+
+#Summarize Post-Gentrification Changes 
+
+```{r}
+changes_vars = c("pc_pop", "pc_college_pop", "pc_p_college_pop", "pc_p_white", "pc_p_black", "pc_p_asian", "pc_p_hispanic", 
+                 "pc_medianincome", "pc_medianrent")
+
+mean_sd = list(mean = ~ round(mean(.x*100, na.rm = TRUE), 0), sd = ~ paste("(", round(sd(.x*100, na.rm = TRUE), 0), ")", sep = "") )
+```
+
+```{r}
+changes_stats = nyc_data %>%
+  group_by(edugentrify) %>%
+  summarize(across(changes_vars, .fns = mean_sd)) %>%
+  arrange(desc(edugentrify)) %>%
+  t() 
+```
+
+```{r}
+changes_stats = changes_stats[-1,]
+```
+
+```{r}
+changes_test = test.diff(data = nyc_data, changes_vars)
+```
+
+```{r}
+changes_stats = cbind(changes_stats, changes_test)
+```
+
+```{r}
+rownames(changes_stats) = c("Population", ".", "College Population", ".", "Percent College", ".", "Percent White", ".", 
+                            "Percent Black", ".", "Percent Asian", ".", "Percent Hispanic", ".", "Median Income", ".",
+                            "Median Rent", ".")
+colnames(changes_stats) = c("Gentrifying", "Not Gentrifying", "Difference")
+```
+
+```{r}
+format.rownames = function(x) {
+  
+  gsub("\\.", " ", x)
+
+}
+```
+
+```{r}
+textable = xtable(changes_stats, type = "latex", align = rep("l", ncol(changes_stats) + 1))
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/SumStats/Changes.tex", sanitize.text.function = function(x) x, 
+      sanitize.rownames.function = format.rownames)
+```
+
+#Summarize Post-Gentrification Employment Changes by Race 
+
+```{r}
+race_vars = c("p_w_white_pc", "p_w_black_pc", "p_w_asian_pc", "p_w_hispanic_pc")
+
+mean_sd = list(mean = ~ round(mean(.x*100, na.rm = TRUE), 0), sd = ~ paste("(", round(sd(.x*100, na.rm = TRUE), 0), ")", sep = "") )
+```
+
+```{r}
+race_stats = nyc_emp_race %>%
+  group_by(edugentrify) %>%
+  summarize(across(all_of(race_vars), .fns = mean_sd)) %>%
+  arrange(desc(edugentrify)) %>%
+  t() 
+```
+
+```{r}
+race_stats = race_stats[-1,]
+```
+
+```{r}
+race_test = test.diff(data = nyc_emp_race, race_vars)
+```
+
+```{r}
+race_stats = cbind(race_stats, race_test)
+```
+
+```{r}
+rownames(race_stats) = c("Percent White", ".", "Percent Black", ".", "Percent Asian", ".", "Percent Hispanic", ".")
+colnames(race_stats) = c("Gentrifying", "Not Gentrifying", "Difference")
+```
+
+```{r}
+format.rownames = function(x) {
+  
+  gsub("\\.", " ", x)
+
+}
+```
+
+```{r}
+textable = xtable(race_stats, type = "latex", align = rep("l", ncol(changes_stats) + 1))
+print(textable, file = "/Users/liampurkey/Desktop/Honors/Results/Tables/SumStats/EmpRace.tex", sanitize.text.function = function(x) x, 
+      sanitize.rownames.function = format.rownames)
+```
+
+
+
+
+
+
+
+
+
+
+

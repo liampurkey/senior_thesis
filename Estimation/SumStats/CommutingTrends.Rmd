@@ -1,0 +1,53 @@
+---
+title: "Neighborhood Commuting Patterns"
+author: "Liam Purkey"
+date: "4/2/2021"
+output: html_document
+---
+
+#Import Data
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(xtable)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Data 
+
+```{r}
+nta_data = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/NTA_OD.csv")
+```
+
+```{r}
+gen_ntas = read_csv("/Users/liampurkey/Desktop/Honors/CleanDataFeb/New York/nyc_panel.csv") %>%
+  filter(edugentrify == 1) %>%
+  distinct(NTA) %>%
+  as.matrix() %>%
+  as.vector()
+```
+
+#Clean Data
+
+```{r}
+placeofwork = nta_data %>%
+  filter(NTA %in% gen_ntas) %>%
+  group_by(year, w_NTA) %>%
+  summarize(across(c("od_midwage", "od_services"), .fns = mean)) %>%
+  ungroup()
+```
+
+#Summarize Midwage Data
+
+```{r}
+placeofwork
+```
+
+```{r}
+placeofwork %>%
+  group_by(year) %>%
+  mutate(jobs_rank = dense_rank(desc(od_midwage))) %>%
+  filter(jobs_rank <= 10)
+```
+
