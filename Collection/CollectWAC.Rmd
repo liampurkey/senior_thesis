@@ -1,0 +1,118 @@
+---
+title: "Collect Panel of LODES Data"
+author: "Liam Purkey"
+date: "12/8/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(lehdr)
+library(sf) 
+library(spData)
+library(foreach)
+library(parallel)
+library(doSNOW)
+```
+
+### Import Census Tracts
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb/CityTracts")
+chi_tracts = read_csv("Chicago.csv")
+la_tracts = read_csv("LosAngeles.csv")
+nyc_tracts = read_csv("NewYorkCity.csv")
+```
+
+```{r}
+chi_tracts = chi_tracts %>%
+  select(GEOID) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  mutate(City = "Chicago") %>%
+  mutate(State = "IL")
+```
+
+```{r}
+la_tracts = la_tracts %>%
+  select(GEOID) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  mutate(City = "Los Angeles") %>%
+  mutate(State = "CA")
+```
+
+```{r}
+nyc_tracts = nyc_tracts %>%
+  select(GEOID) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  mutate(City = "New York City") %>%
+  mutate(State = "NY")
+```
+
+### Write Function to Download WAC Data
+
+```{r}
+get_lodes_wac = function(state_list, year) {
+  
+  data = grab_lodes(state = state_list, year = year, lodes_type = "wac", job_type = "JT03", segment = "S000", agg_geo = "tract")
+  data = data %>%
+    setNames(paste0("w_", names(.))) %>%
+    rename(year = w_year) %>%
+    rename(State = w_state) %>%
+    rename(GEOID = w_w_tract)
+  
+  return(data)
+
+}
+```
+
+### Set Clusters
+
+```{r}
+cl <- makeCluster(detectCores() - 1 , outfile="")
+registerDoSNOW(cl)
+```
+
+```{r}
+years = c(2002:2018)
+```
+
+### Collect Chicago Data
+
+```{r}
+il_data = foreach(i = 1:length(years), .combine = rbind, .packages = c("lehdr", "tidyverse")) %dopar% {
+  year = years[i]
+  get_lodes_all(state_list = "il", year = year)
+}
+```
+
+```{r}
+chi_wac = left_join(chi_tracts, il_data, by = c("GEOID", "State"))
+```
+
+### Collect Los Angeles Data
+
+```{r}
+ca_data = foreach(i = 1:length(years), .combine = rbind, .packages = c("lehdr", "tidyverse")) %dopar% {
+  year = years[i]
+  get_lodes_all(state_list = "ca", year = year)
+}
+```
+
+```{r}
+la_wac = left_join(la_tracts, ca_data, by = c("GEOID", "State"))
+```
+
+### Collect Los Angeles Data
+
+```{r}
+ny_data = foreach(i = 1:length(years), .combine = rbind, .packages = c("lehdr", "tidyverse")) %dopar% {
+  year = years[i]
+  get_lodes_all(state_list = "ny", year = year)
+}
+```
+
+```{r}
+nyc_wac = left_join(nyc_tracts, ny_data, by = c("GEOID", "State"))
+```

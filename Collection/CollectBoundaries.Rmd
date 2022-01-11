@@ -1,0 +1,194 @@
+---
+title: "Collect Tract Boundaries"
+author: "Liam Purkey"
+date: "1/3/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidycensus)
+library(tigris)
+options(tigris_use_cache = TRUE)
+library(sf)
+library(spData)
+library(tmap)
+```
+
+```{r}
+st_erase <- function(x, y) {
+  st_difference(x, st_union(y))
+}
+```
+
+#Import Tract Lists
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb/CityTracts")
+chi_tracts = read_csv("Chicago.csv")
+la_tracts = read_csv("LosAngeles.csv")
+```
+
+```{r}
+chi_tracts = chi_tracts %>%
+  select(GEOID) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  mutate(City = "Chicago") %>%
+  mutate(State = "IL")
+```
+
+```{r}
+la_tracts = la_tracts %>%
+  select(-Tract) %>%
+  mutate(City = "Los Angeles") %>%
+  mutate(State = "CA")
+```
+
+#Cook County
+
+```{r}
+cook_tracts = get_acs(state = "IL", county = "Cook", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE)
+```
+
+```{r}
+cook_tracts = cook_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+chi_geo = right_join(cook_tracts, chi_tracts, by = "GEOID")
+```
+
+```{r}
+st_write(chi_geo, "/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries/Chicago/Chicago.shp", append=FALSE)
+```
+
+#Los Angeles County 
+
+```{r}
+lac_tracts = get_acs(state = "CA", county = "Los Angeles", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE)
+```
+
+```{r}
+lac_tracts = lac_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+la_geo = right_join(lac_tracts, la_tracts, by = "GEOID")
+```
+
+```{r}
+st_write(la_geo, "/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries/Los Angeles/Los Angeles.shp", append=FALSE)
+```
+
+#Bronx
+
+```{r}
+bronx_tracts = get_acs(state = "NY", county = "Bronx", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE, cb = FALSE)
+```
+
+```{r}
+bronx_tracts = bronx_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+bronx_water = area_water("NY", county = "Bronx", class = "sf")
+```
+
+```{r}
+bronx_tracts = st_erase(bronx_tracts, bronx_water)
+```
+
+#Brooklyn
+
+```{r}
+brooklyn_tracts = get_acs(state = "NY", county = "Kings", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE, cb = FALSE)
+```
+
+```{r}
+brooklyn_tracts = brooklyn_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+brooklyn_water = area_water("NY", county = "Kings", class = "sf")
+```
+
+```{r}
+brooklyn_tracts = st_erase(brooklyn_tracts, brooklyn_water)
+```
+
+#Manhattan
+
+```{r}
+manhattan_tracts = get_acs(state = "NY", county = "New York", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE, cb = FALSE)
+```
+
+```{r}
+manhattan_tracts = manhattan_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+manhattan_water = area_water("NY", county = "New York", class = "sf")
+```
+
+```{r}
+manhattan_tracts = st_erase(manhattan_tracts, manhattan_water)
+```
+
+#Staten Island
+
+```{r}
+staten_tracts = get_acs(state = "NY", county = "Richmond", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE, cb = FALSE)
+```
+
+```{r}
+staten_tracts = staten_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+staten_water = area_water("NY", county = "Richmond", class = "sf")
+```
+
+```{r}
+staten_tracts = st_erase(staten_tracts, staten_water)
+```
+
+#Queens
+
+```{r}
+queens_tracts = get_acs(state = "NY", county = "Queens", year = 2010, geography = "tract", variables = "B01001_001", geometry = TRUE, cb = FALSE)
+```
+
+```{r}
+queens_tracts = queens_tracts %>%
+  select(GEOID, geometry)
+```
+
+```{r}
+queens_water = area_water("NY", county = "Queens", class = "sf")
+```
+
+```{r}
+queens_tracts = st_erase(queens_tracts, queens_water)
+```
+
+#New York City
+
+```{r}
+ny_geo = bind_rows(bronx_tracts, brooklyn_tracts, manhattan_tracts, staten_tracts, queens_tracts)
+```
+
+```{r}
+st_write(ny_geo, "/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries/New York/New York.shp", append=FALSE)
+```
+
+
+
+
+
+

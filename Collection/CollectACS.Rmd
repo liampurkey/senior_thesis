@@ -1,0 +1,285 @@
+---
+title: "Demographic Data Collection (American Community Survey and 2000 Census)"
+author: "Liam Purkey"
+date: "11/28/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidycensus)
+options(tigris_use_cache = TRUE)
+library(readxl)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Tract Lists
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb/CityTracts")
+chi_tracts = read_csv("Chicago.csv")
+la_tracts = read_csv("LosAngeles.csv")
+```
+
+```{r}
+chi_tracts = chi_tracts %>%
+  select(GEOID) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  mutate(City = "Chicago") %>%
+  mutate(State = "IL")
+```
+
+```{r}
+la_tracts = la_tracts %>%
+  select(-Tract) %>%
+  mutate(City = "Los Angeles") %>%
+  mutate(State = "CA")
+```
+
+#List Variables to Import
+
+```{r}
+race_2010 = c(pop = "B01003_001", white = "B02001_002", black = "B02001_003", asian = "B02001_005", hispanic = "B03001_003")
+
+m_age_2010 = c(m_25_29 = "B01001_011", m_30_34 = "B01001_012", m_35_39 = "B01001_013", m_40_44 = "B01001_014", m_45_49 = "B01001_015", m_50_54 = "B01001_016", 
+               m_55_59 = "B01001_017", m_60_64 = "B01001_018")
+
+f_age_2010 = c(f_25_29 = "B01001_035", f_30_34 = "B01001_036", f_35_39 = "B01001_037", f_40_44 = "B01001_038", 
+          f_45_49 = "B01001_039", f_50_54 = "B01001_040", f_55_59 = "B01001_041", f_60_64 = "B01001_042")
+
+education_2010 = c(lesshs_pop = "B23006_002", hs_pop = "B23006_009", college_pop = "B23006_023")
+
+unemployment_2010 = c(lesshs_laborforce = "B23006_005", lesshs_unemp = "B23006_007", hs_laborforce = "B23006_012", hs_unemp = "B23006_014")
+
+housing_2010 = c(medianrent = "B25064_001", medianhomevalue = "B25077_001", housing_pop = "B25026_001", renter_occupied = "B25026_009")
+
+poverty_2010 = c(m_lesshs_poverty = "B17003_004", m_hs_poverty = "B17003_005", f_lesshs_poverty = "B17003_009", f_hs_poverty = "B17003_010")
+
+income_2010 = c(medianincome = "B19013_001", lesshs_medianearnings = "B20004_002", hs_medianearnings = "B20004_003", college_medianearnings = "B20004_005")
+
+variables_2010 = c(race_2010, m_age_2010, f_age_2010, education_2010, unemployment_2010, housing_2010, poverty_2010, income_2010)
+```
+
+```{r}
+race_2018 = c(pop = "B01003_001", white = "B02001_002", black = "B02001_003", asian = "B02001_005", hispanic = "B03001_003")
+
+m_age_2018 = c(m_25_29 = "B01001_011", m_30_34 = "B01001_012", m_35_39 = "B01001_013", m_40_44 = "B01001_014", m_45_49 = "B01001_015", m_50_54 = "B01001_016", 
+               m_55_59 = "B01001_017", m_60_61 = "B01001_018", m_62_64 = "B01001_019")
+
+f_age_2018 = c(f_25_29 = "B01001_035", f_30_34 = "B01001_036", f_35_39 = "B01001_037", f_40_44 = "B01001_038", 
+               f_45_49 = "B01001_039", f_50_54 = "B01001_040", f_55_59 = "B01001_041", f_60_61 = "B01001_042", f_62_64 = "B01001_043")
+
+education_2018 = c(lesshs_pop = "B23006_002", hs_pop = "B23006_009", college_pop = "B23006_023")
+
+unemployment_2018 = c(lesshs_laborforce = "B23006_005", lesshs_unemp = "B23006_007", hs_laborforce = "B23006_012", hs_unemp = "B23006_014")
+
+housing_2018 = c(medianrent = "B25064_001", medianhomevalue = "B25077_001", housing_pop = "B25026_001", renter_occupied = "B25026_009")
+
+poverty_2018 = c(m_lesshs_poverty = "B17003_004", m_hs_poverty = "B17003_005", f_lesshs_poverty = "B17003_009", f_hs_poverty = "B17003_010")
+
+income_2018 = c(medianincome = "B19013_001", lesshs_medianearnings = "B20004_002", hs_medianearnings = "B20004_003", college_medianearnings = "B20004_005")
+
+variables_2018 = c(race_2018, m_age_2018, f_age_2018, education_2018, unemployment_2018, housing_2018, poverty_2018, income_2018)
+```
+
+#Import and Merge Chicago Data
+
+```{r}
+cook_2010 = get_acs(geography = "tract", variables = variables_2010, state = "IL", county = "Cook", year = 2010, geometry = FALSE)
+cook_2018 = get_acs(geography = "tract", variables = variables_2018, state = "IL", county = "Cook", year = 2018, geometry = FALSE)
+```
+
+```{r}
+cook_2010 = cook_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+cook_2018 = cook_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+chi_2010 = left_join(chi_tracts, cook_2010, by = "GEOID")
+chi_2018 = left_join(chi_tracts, cook_2018, by = "GEOID")
+```
+
+```{r}
+chi_data = bind_rows(chi_2010, chi_2018)
+```
+
+```{r}
+write_csv(chi_data, "/Users/liampurkey/Desktop/Honors/RawDataFeb/ACS/Chicago.csv")
+```
+
+#Import and Merge Los Angeles Data
+
+```{r}
+lac_2010 = get_acs(geography = "tract", variables = variables_2010, state = "CA", county = "Los Angeles", year = 2010, geometry = FALSE)
+lac_2018 = get_acs(geography = "tract", variables = variables_2018, state = "CA", county = "Los Angeles", year = 2018, geometry = FALSE)
+```
+
+```{r}
+lac_2010 = lac_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+lac_2018 = lac_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+la_2010 = left_join(la_tracts, lac_2010, by = "GEOID")
+la_2018 = left_join(la_tracts, lac_2018, by = "GEOID")
+```
+
+```{r}
+la_data = bind_rows(la_2010, la_2018)
+```
+
+```{r}
+write_csv(la_data, "/Users/liampurkey/Desktop/Honors/RawDataFeb/ACS/LosAngeles.csv")
+```
+
+#Import and Clean New York Data
+
+#Bronx
+
+```{r}
+bronx_2010 = get_acs(geography = "tract", variables = variables_2010, state = "NY", county = "Bronx", year = 2010, geometry = FALSE)
+bronx_2018 = get_acs(geography = "tract", variables = variables_2018, state = "NY", county = "Bronx", year = 2018, geometry = FALSE)
+```
+
+```{r}
+bronx_2010 = bronx_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+bronx_2018 = bronx_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+bronx_data = bind_rows(bronx_2010, bronx_2018)
+```
+
+#Brooklyn
+
+```{r}
+brooklyn_2010 = get_acs(geography = "tract", variables = variables_2010, state = "NY", county = "Kings", year = 2010, geometry = FALSE)
+brooklyn_2018 = get_acs(geography = "tract", variables = variables_2018, state = "NY", county = "Kings", year = 2018, geometry = FALSE)
+```
+
+```{r}
+brooklyn_2010 = brooklyn_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+brooklyn_2018 = brooklyn_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+brooklyn_data = bind_rows(brooklyn_2010, brooklyn_2018)
+```
+
+#Manhattan
+
+```{r}
+manhattan_2010 = get_acs(geography = "tract", variables = variables_2010, state = "NY", county = "New York", year = 2010, geometry = FALSE)
+manhattan_2018 = get_acs(geography = "tract", variables = variables_2018, state = "NY", county = "New York", year = 2018, geometry = FALSE)
+```
+
+```{r}
+manhattan_2010 = manhattan_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+manhattan_2018 = manhattan_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+manhattan_data = bind_rows(manhattan_2010, manhattan_2018)
+```
+
+#Staten 
+
+```{r}
+staten_2010 = get_acs(geography = "tract", variables = variables_2010, state = "NY", county = "Richmond", year = 2010, geometry = FALSE)
+staten_2018 = get_acs(geography = "tract", variables = variables_2018, state = "NY", county = "Richmond", year = 2018, geometry = FALSE)
+```
+
+```{r}
+staten_2010 = staten_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+staten_2018 = staten_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+staten_data = bind_rows(staten_2010, staten_2018)
+```
+
+#Queens 
+
+```{r}
+queens_2010 = get_acs(geography = "tract", variables = variables_2010, state = "NY", county = "Queens", year = 2010, geometry = FALSE)
+queens_2018 = get_acs(geography = "tract", variables = variables_2018, state = "NY", county = "Queens", year = 2018, geometry = FALSE)
+```
+
+```{r}
+queens_2010 = queens_2010 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2010)
+queens_2018 = queens_2018 %>%
+  select(-c("NAME", "moe")) %>% 
+  spread(variable, estimate) %>%
+  mutate(year = 2018)
+```
+
+```{r}
+queens_data = bind_rows(queens_2010, queens_2018)
+```
+
+```{r}
+nyc_data = bind_rows(bronx_data, brooklyn_data, manhattan_data, staten_data, queens_data)
+```
+
+```{r}
+nyc_data = nyc_data %>%
+  mutate(City = "New York City") %>%
+  mutate(State = "NY")
+```
+
+```{r}
+write_csv(nyc_data, "/Users/liampurkey/Desktop/Honors/RawDataFeb/ACS/NewYork.csv")
+```
+
+#Join Data
+
+```{r}
+all_data = bind_rows(chi_data, la_data, nyc_data)
+```
+
+```{r}
+write_csv(all_data, "/Users/liampurkey/Desktop/Honors/RawDataFeb/AllACS.csv")
+```
+
+
+
+

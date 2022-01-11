@@ -1,0 +1,676 @@
+---
+title: "Collect OD"
+author: "Liam Purkey"
+date: "3/15/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(lehdr)
+library(foreach)
+library(parallel)
+library(doSNOW)
+```
+
+#Import NTA Data
+
+```{r}
+ntas = read_excel("/Users/liampurkey/Desktop/Honors/RawDataFeb/NTA.xlsx") %>%
+  filter(!is.na(Borough)) %>%
+  rename(GEOID = Geoid) %>%
+  rename(NTA = Name) %>%
+  select(NTA, GEOID) %>%
+  mutate(GEOID = as.character(GEOID))
+w_ntas = ntas %>%
+  rename(w_GEOID = GEOID) %>%
+  rename(w_NTA = NTA)
+```
+
+#Collect 2002 Data 
+
+```{r}
+ny_2002 = grab_lodes(state = "ny", year = 2002, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2002 = inner_join(ny_2002, ntas, by = "GEOID")
+nyc_2002 = inner_join(nyc_2002, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2002 = nyc_2002 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct()
+```
+
+```{r}
+write_csv(nyc_2002, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2002.csv")
+```
+
+```{r}
+rm(list=c("ny_2002", "nyc_2002"))
+```
+
+#Collect 2003 Data 
+
+```{r}
+ny_2003 = grab_lodes(state = "ny", year = 2003, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2003 = inner_join(ny_2003, ntas, by = "GEOID")
+nyc_2003 = inner_join(nyc_2003, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2003 = nyc_2003 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2003, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2003.csv")
+```
+
+```{r}
+rm(list=c("ny_2003", "nyc_2003"))
+```
+
+#Collect 2004 Data 
+
+```{r}
+ny_2004 = grab_lodes(state = "ny", year = 2004, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2004 = inner_join(ny_2004, ntas, by = "GEOID")
+nyc_2004 = inner_join(nyc_2004, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2004 = nyc_2004 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2004, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2004.csv")
+```
+
+```{r}
+rm(list=c("ny_2004", "nyc_2004"))
+```
+
+#Collect 2005 Data 
+
+```{r}
+ny_2005 = grab_lodes(state = "ny", year = 2005, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2005 = inner_join(ny_2005, ntas, by = "GEOID")
+nyc_2005 = inner_join(nyc_2005, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2005 = nyc_2005 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2005, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2005.csv")
+```
+
+```{r}
+rm(list=c("ny_2005", "nyc_2005"))
+```
+
+#Collect 2006 Data 
+
+```{r}
+ny_2006 = grab_lodes(state = "ny", year = 2006, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2006 = inner_join(ny_2006, ntas, by = "GEOID")
+nyc_2006 = inner_join(nyc_2006, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2006 = nyc_2006 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct()
+```
+
+```{r}
+write_csv(nyc_2006, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2006.csv")
+```
+
+```{r}
+rm(list=c("ny_2006", "nyc_2006"))
+```
+
+#Collect 2007 Data 
+
+```{r}
+ny_2007 = grab_lodes(state = "ny", year = 2007, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2007 = inner_join(ny_2007, ntas, by = "GEOID")
+nyc_2007 = inner_join(nyc_2007, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2007 = nyc_2007 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2007, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2007.csv")
+```
+
+```{r}
+rm(list=c("ny_2007", "nyc_2007"))
+```
+
+#Collect 2008 Data 
+
+```{r}
+ny_2008 = grab_lodes(state = "ny", year = 2008, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2008 = inner_join(ny_2008, ntas, by = "GEOID")
+nyc_2008 = inner_join(nyc_2008, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2008 = nyc_2008 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2008, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2008.csv")
+```
+
+```{r}
+rm(list=c("ny_2008", "nyc_2008"))
+```
+
+#Collect 2009 Data 
+
+```{r}
+ny_2009 = grab_lodes(state = "ny", year = 2009, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2009 = inner_join(ny_2009, ntas, by = "GEOID")
+nyc_2009 = inner_join(nyc_2009, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2009 = nyc_2009 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2009, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2009.csv")
+```
+
+```{r}
+rm(list=c("ny_2009", "nyc_2009"))
+```
+
+#Collect 2010 Data 
+
+```{r}
+ny_2010 = grab_lodes(state = "ny", year = 2010, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2010 = inner_join(ny_2010, ntas, by = "GEOID")
+nyc_2010 = inner_join(nyc_2010, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2010 = nyc_2010 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2010, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2010.csv")
+```
+
+```{r}
+rm(list=c("ny_2010", "nyc_2010"))
+```
+
+#Collect 2011 Data 
+
+```{r}
+ny_2011 = grab_lodes(state = "ny", year = 2011, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2011 = inner_join(ny_2011, ntas, by = "GEOID")
+nyc_2011 = inner_join(nyc_2011, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2011 = nyc_2011 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2011, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2011.csv")
+```
+
+```{r}
+rm(list=c("ny_2011", "nyc_2011"))
+```
+
+#Collect 2012 Data 
+
+```{r}
+ny_2012 = grab_lodes(state = "ny", year = 2012, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2012 = inner_join(ny_2012, ntas, by = "GEOID")
+nyc_2012 = inner_join(nyc_2012, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2012 = nyc_2012 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2012, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2012.csv")
+```
+
+```{r}
+rm(list=c("ny_2012", "nyc_2012"))
+```
+
+#Collect 2013 Data 
+
+```{r}
+ny_2013 = grab_lodes(state = "ny", year = 2013, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2013 = inner_join(ny_2013, ntas, by = "GEOID")
+nyc_2013 = inner_join(nyc_2013, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2013 = nyc_2013 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2013, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2013.csv")
+```
+
+```{r}
+rm(list=c("ny_2013", "nyc_2013"))
+```
+
+#Collect 2014 Data 
+
+```{r}
+ny_2014 = grab_lodes(state = "ny", year = 2014, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2014 = inner_join(ny_2014, ntas, by = "GEOID")
+nyc_2014 = inner_join(nyc_2014, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2014 = nyc_2014 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2014, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2014.csv")
+```
+
+```{r}
+rm(list=c("ny_2014", "nyc_2014"))
+```
+
+#Collect 2015 Data 
+
+```{r}
+ny_2015 = grab_lodes(state = "ny", year = 2015, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2015 = inner_join(ny_2015, ntas, by = "GEOID")
+nyc_2015 = inner_join(nyc_2015, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2015 = nyc_2015 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2015, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2015.csv")
+```
+
+```{r}
+rm(list=c("ny_2015", "nyc_2015"))
+```
+
+#Collect 2016 Data 
+
+```{r}
+ny_2016 = grab_lodes(state = "ny", year = 2016, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2016 = inner_join(ny_2016, ntas, by = "GEOID")
+nyc_2016 = inner_join(nyc_2016, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2016 = nyc_2016 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2016, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2016.csv")
+```
+
+```{r}
+rm(list=c("ny_2016", "nyc_2016"))
+```
+
+#Collect 2017 Data 
+
+```{r}
+ny_2017 = grab_lodes(state = "ny", year = 2017, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2017 = inner_join(ny_2017, ntas, by = "GEOID")
+nyc_2017 = inner_join(nyc_2017, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2017 = nyc_2017 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2017, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2017.csv")
+```
+
+```{r}
+rm(list=c("ny_2017", "nyc_2017"))
+```
+
+#Collect 2018 Data 
+
+```{r}
+ny_2018 = grab_lodes(state = "ny", year = 2018, lodes_type = "od", state_part = "main", job_type = "JT03", agg_geo = "tract") %>%
+  rename(GEOID = h_tract) %>%
+  rename(w_GEOID = w_tract) %>%
+  rename(State = state) %>%
+  select(-c("SA01", "SA02", "SA03", "SI02")) %>%
+  rename(od_total = S000) %>%
+  rename(od_lowwage = SE01) %>%
+  rename(od_midwage = SE02) %>%
+  rename(od_highwage = SE03) %>%
+  rename(od_goods = SI01) %>%
+  rename(od_services = SI03)
+```
+
+```{r}
+nyc_2018 = inner_join(ny_2018, ntas, by = "GEOID")
+nyc_2018 = inner_join(nyc_2018, w_ntas, by = "w_GEOID")
+```
+
+```{r}
+nyc_2018 = nyc_2018 %>%
+  filter(NTA == w_NTA) %>%
+  group_by(GEOID) %>%
+  mutate(across(c("od_total", "od_lowwage", "od_midwage", "od_highwage", "od_goods", "od_services"), .fns = sum)) %>%
+  select(-w_GEOID) %>%
+  distinct() 
+```
+
+```{r}
+write_csv(nyc_2018, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/OD/nyc_2018.csv")
+```
+
+```{r}
+rm(list=c("ny_2018", "nyc_2018"))
+```
