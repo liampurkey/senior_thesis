@@ -1,0 +1,168 @@
+---
+title: "Clean ACS Data"
+author: "Liam Purkey"
+date: "1/13/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(sf)
+library(spData)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Data
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb")
+ACS_toclean = read_csv("ACS/NewYork.csv", col_types = cols(
+    f_60_61 = col_double(),
+    f_62_64 = col_double(),
+    m_60_61 = col_double(),
+    m_62_64 = col_double()
+  )
+) %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  select(-c("college_medianearnings", "f_hs_poverty", "f_lesshs_poverty", "hs_medianearnings", "lesshs_medianearnings",
+            "m_hs_poverty", "m_lesshs_poverty"))
+nyc_CPI = read_excel("CPI/NewYork.xlsx") %>%
+  rename(year = Year)
+```
+
+#Import Boundaries
+
+```{r}
+tracts_geo = st_read("/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries/New York/New York.shp")
+```
+
+```{r}
+tract_area = clean_units(st_area(tracts_geo)*3.86102e-7)
+```
+
+```{r}
+tract_area = cbind(tracts_geo, tract_area) %>%
+  st_drop_geometry()
+```
+
+#Format and Merge CPI Data
+
+```{r}
+ACS_toclean = left_join(ACS_toclean, nyc_CPI, by = c("City", "year"))
+```
+
+```{r}
+ACS_toclean = left_join(ACS_toclean, tract_area, by = "GEOID")
+```
+
+#Transform to 2010 Dollars 
+
+```{r}
+cleandata = ACS_toclean %>% 
+  to_2010_dollars(variables = c("medianhomevalue", "medianincome", "medianrent")) %>%
+  select(-c("CPI", "CPI_ratio"))
+```
+
+```{r}
+cleandata = cleandata %>% 
+  mutate(m_workingage = case_when(year == 2010 ~ m_25_29 + m_30_34 + m_35_39 + m_40_44 + m_45_49 + m_50_54 + m_55_59 + m_60_64,
+                                  year == 2018 ~ m_25_29 + m_30_34 + m_35_39 + m_40_44 + m_45_49 + m_50_54 + m_55_59 + m_60_61 + m_62_64)) %>%
+  mutate(f_workingage = case_when(year == 2010 ~ f_25_29 + f_30_34 + f_35_39 + f_40_44 + f_45_49 + f_50_54 + f_55_59 + f_60_64,
+                                  year == 2018 ~ f_25_29 + f_30_34 + f_35_39 + f_40_44 + f_45_49 + f_50_54 + f_55_59 + f_60_61 + f_62_64)) %>%
+  mutate(workingage = m_workingage + f_workingage) %>%
+  select(-c("m_25_29", "m_30_34", "m_35_39", "m_40_44", "m_45_49", "m_50_54", 
+            "m_55_59", "m_60_64", "m_60_61", "m_62_64", "m_workingage",
+            "f_25_29", "f_30_34", "f_35_39", "f_40_44", "f_45_49", "f_50_54", 
+            "f_55_59", "f_60_64", "f_60_61", "f_62_64", "f_workingage"
+            ))
+```
+
+#Calculate Shares
+
+```{r}
+cleandata = cleandata %>%
+  normalize(variables = c("asian", "black", "hispanic", "white", "college_pop", "hs_pop", "lesshs_pop", "renter_occupied", "workingage"), "pop") %>%
+  normalize_drop(variables = c("lesshs_unemp"), "lesshs_laborforce") %>%
+  normalize_drop(variables = c("lesshs_laborforce"), "lesshs_pop") %>%
+  normalize_drop(variables = c("hs_unemp"), "hs_laborforce") %>%
+  normalize_drop(variables = c("hs_laborforce"), "hs_pop") 
+```
+
+#Calculate Densities
+
+```{r}
+cleandata = cleandata %>%
+  normalize(variables = c("asian", "black", "hispanic", "white", "college_pop", "hs_pop", "lesshs_pop", "renter_occupied", "workingage"), "tract_area", newname = "d")
+```
+
+###Transform to Long Differences
+
+```{r}
+vars = names(cleandata)
+```
+
+```{r}
+vars = vars[!vars %in% c("City", "GEOID", "State", "year", "tract_area")] 
+vars = vars[-grep("^d_", vars)]
+```
+
+```{r}
+differenced_data = create_pc_changes(cleandata, vars, start_year = 2010, end_year = 2018)
+```
+
+```{r}
+differenced_data = differenced_data %>%
+  filter(!is.infinite(pc_college_pop) & !is.na(pc_college_pop) & !is.nan(pc_college_pop))
+```
+
+#Merge with NTA data 
+
+```{r}
+nta = read_excel("/Users/liampurkey/Desktop/Honors/RawDataFeb/NTA.xlsx") %>%
+  select(Borough, Name, Geoid) %>%
+  rename(NTA = Name) %>%
+  rename(GEOID = Geoid) %>%
+  filter(!is.na(Borough))
+```
+
+```{r}
+differenced_data = inner_join(differenced_data, nta, by = "GEOID")
+```
+
+#Drop 2018 Variables and Drop Park-Cemetery Neighborhoods
+
+```{r}
+vars_2018 = names(differenced_data)
+vars_2018 = vars_2018[grep("_2018", vars_2018)]
+vars_2018 = vars_2018[!vars_2018 %in% c("college_pop_2018", "d_college_pop_2018", "p_college_pop_2018", "pop_2018")]
+```
+
+```{r}
+differenced_data = differenced_data %>%
+  select(-all_of(vars_2018)) %>%
+  filter(NTA != "park-cemetery-etc-Brooklyn" & NTA != "park-cemetery-etc-Queens" & NTA != "park-cemetery-etc-Bronx") 
+```
+
+```{r}
+write_csv(differenced_data, "/Users/liampurkey/Desktop/Honors/CleanDataFeb/NYC_ACS.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,133 @@
+---
+title: "Clean LODES Data"
+author: "Liam Purkey"
+date: "12/13/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(sf)
+library(spData)
+source("/Users/liampurkey/Desktop/Honors/Code/R/Functions.R")
+```
+
+#Import Boundaries
+
+```{r}
+tracts_geo = st_read("/Users/liampurkey/Desktop/Honors/RawDataFeb/Boundaries/New York/New York.shp")
+```
+
+```{r}
+tract_area = clean_units(st_area(tracts_geo)*3.86102e-7)
+```
+
+```{r}
+tract_area = cbind(tracts_geo, tract_area) %>%
+  st_drop_geometry()
+```
+
+#Import NTA
+
+```{r}
+nta = read_excel("/Users/liampurkey/Desktop/Honors/RawDataFeb/NTA.xlsx") %>%
+  select(Borough, Name, Geoid) %>%
+  rename(NTA = Name) %>%
+  rename(GEOID = Geoid) %>%
+  filter(!is.na(Borough))
+```
+
+#Merge Data
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/RawDataFeb/WAC")
+wac = read_csv("NewYork.csv") %>%
+  mutate(GEOID = as.character(GEOID))
+```
+
+```{r}
+data = wac %>%
+  select(-c("w_CA01", "w_CA02", "w_CA03", "w_CNS01", "w_CNS02", "w_CNS03", "w_CNS04",
+            "w_CNS06", "w_CNS08", "w_CNS09", "w_CNS10", "w_CNS11", "w_CNS12", "w_CNS13", 
+            "w_CNS14", "w_CNS15", "w_CNS16", "w_CNS17", "w_CNS19", "w_CNS20",
+            "w_CR03", "w_CR05", "w_CR07", "w_CT01", "w_CD01",
+            "w_CD02", "w_CD03", "w_CD04", "w_CS01", "w_CS02", "w_CFA01", "w_CFA02",
+            "w_CFA03", "w_CFA04", "w_CFA05", "w_CFS01", "w_CFS02", "w_CFS03", 
+            "w_CFS04", "w_CFS05")) 
+```
+
+```{r}
+data = inner_join(data, tract_area, by = "GEOID")
+```
+
+```{r}
+data = inner_join(data, nta, by = "GEOID")
+```
+
+#Clean Data
+
+```{r}
+data = data %>%
+    rename(w_total = w_C000) %>%
+    rename(w_lowwage = w_CE01) %>%
+    rename(w_midwage = w_CE02) %>%
+    rename(w_highwage = w_CE03) %>%
+    rename(w_manufacturing = w_CNS05) %>%
+    rename(w_retail = w_CNS07) %>%
+    rename(w_food = w_CNS18) %>%
+    rename(w_white = w_CR01) %>%
+    rename(w_black = w_CR02) %>%
+    rename(w_asian = w_CR04) %>%
+    rename(w_hispanic = w_CT02)
+```
+
+```{r}
+data = data %>%
+  group_by(GEOID) %>%
+  mutate(w_total_2010 = ifelse(year == 2010, w_total, NA)) %>%
+  fill(w_total_2010, .direction = "downup") %>%
+  mutate(w_lowwage_2010 = ifelse(year == 2010, w_lowwage, NA)) %>%
+  fill(w_lowwage_2010, .direction = "downup") %>%
+  mutate(w_midwage_2010 = ifelse(year == 2010, w_midwage, NA)) %>%
+  fill(w_midwage_2010, .direction = "downup") %>%
+  mutate(w_highwage_2010 = ifelse(year == 2010, w_highwage, NA)) %>%
+  fill(w_highwage_2010, .direction = "downup") %>%
+  mutate(w_manufacturing_2010 = ifelse(year == 2010, w_manufacturing, NA)) %>%
+  fill(w_manufacturing_2010, .direction = "downup") %>%
+  mutate(w_retail_2010 = ifelse(year == 2010, w_retail, NA)) %>%
+  fill(w_retail_2010, .direction = "downup") %>%
+  mutate(w_food_2010 = ifelse(year == 2010, w_food, NA)) %>%
+  fill(w_food_2010, .direction = "downup") 
+```
+
+```{r}
+data = data %>%
+  group_by(NTA, year) %>%
+  mutate(nhood_area = sum(tract_area)) %>%
+  ungroup()
+```
+
+```{r}
+data = data %>%
+  normalize_drop(variables = c("w_white", "w_black", "w_asian", "w_hispanic"), total = "w_total") %>%
+  normalize_drop(variables = c("w_total", "w_lowwage", "w_midwage", "w_highwage", "w_manufacturing", "w_retail", "w_food"), total = "tract_area", newname = "d") %>%
+  normalize_drop(variables = c("w_total_2010", "w_lowwage_2010", "w_midwage_2010", "w_highwage_2010", "w_manufacturing_2010", "w_retail_2010", "w_food_2010"),
+                 total = "tract_area", newname = "d") %>%
+  select(-tract_area)
+```
+
+```{r}
+setwd("/Users/liampurkey/Desktop/Honors/CleanDataFeb/WAC")
+write_csv(data, "NewYork.csv")
+```
+
+
+
+
+
+
+
+
+
+
